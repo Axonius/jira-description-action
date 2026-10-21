@@ -8,6 +8,24 @@ import {
 } from './constants';
 import { JIRADetails } from './types';
 
+/**
+ * Strips CR (\r), LF (\n) and other ASCII control characters from a value that will
+ * be placed into an outbound HTTP request (header value or URL path).
+ *
+ * Mitigates CWE-113 / CVE-2026-40175 (axios does not neutralize CRLF in header
+ * values): a tainted value can no longer terminate a header line and smuggle an
+ * additional request onto the socket.
+ */
+export const sanitizeHttpValue = (value: string | null | undefined): string => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  // eslint-disable-next-line no-control-regex
+  return String(value)
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim();
+};
+
 const getJIRAIssueKey = (input: string, regexp: RegExp = JIRA_REGEX_MATCHER): string | null => {
   const matches = regexp.exec(input);
   return matches ? matches[matches.length - 1] : null;

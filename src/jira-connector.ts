@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { getInputs } from './action-inputs';
 import { JIRA, JIRADetails } from './types';
+import { sanitizeHttpValue } from './utils';
 
 export class JiraConnector {
   client: AxiosInstance;
@@ -18,7 +19,9 @@ export class JiraConnector {
     this.client = axios.create({
       baseURL: `${JIRA_BASE_URL}/rest/api/3`,
       timeout: 2000,
-      headers: { Authorization: `Basic ${encodedToken}` },
+      // Header values are sanitized before reaching axios (CVE-2026-40175 / CWE-113):
+      // base64 output never contains CR/LF, and sanitizeHttpValue is a second guard.
+      headers: { Authorization: sanitizeHttpValue(`Basic ${encodedToken}`) },
     });
   }
 
@@ -45,13 +48,15 @@ export class JiraConnector {
           key: project.key,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       throw error;
     }
   }
 
   async getIssue(id: string): Promise<JIRA.Issue> {
-    const url = `/issue/${id}?fields=project,summary,issuetype`;
+    // Sanitize + URL-encode the key so it cannot inject CR/LF or extra path/query segments.
+    const safeId = encodeURIComponent(sanitizeHttpValue(id));
+    const url = `/issue/${safeId}?fields=project,summary,issuetype`;
     const response = await this.client.get<JIRA.Issue>(url);
     return response.data;
   }

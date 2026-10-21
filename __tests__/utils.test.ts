@@ -1,5 +1,5 @@
 import { HIDDEN_MARKER_END, HIDDEN_MARKER_START, WARNING_MESSAGE_ABOUT_HIDDEN_MARKERS } from '../src/constants';
-import { getJIRAIssueKeyByDefaultRegexp, getJIRAIssueKeysByCustomRegexp, getPRDescription, shouldSkipBranch } from '../src/utils';
+import { getJIRAIssueKeyByDefaultRegexp, getJIRAIssueKeysByCustomRegexp, getPRDescription, sanitizeHttpValue, shouldSkipBranch } from '../src/utils';
 
 jest.spyOn(console, 'log').mockImplementation(); // avoid actual console.log in test output
 
@@ -83,5 +83,31 @@ ${HIDDEN_MARKER_START}
 ${issueInfo}
 ${HIDDEN_MARKER_END}
 ${oldPRBodyInformation}`);
+  });
+});
+
+describe('sanitizeHttpValue()', () => {
+  it('leaves ordinary values untouched', () => {
+    expect(sanitizeHttpValue('user@example.com:abc123')).toEqual('user@example.com:abc123');
+    expect(sanitizeHttpValue('https://company.atlassian.net')).toEqual('https://company.atlassian.net');
+    expect(sanitizeHttpValue('ES-43')).toEqual('ES-43');
+  });
+
+  it('strips CR, LF and CRLF sequences (CWE-113 / CVE-2026-40175)', () => {
+    expect(sanitizeHttpValue('abc\r\nX-Injected: 1')).toEqual('abcX-Injected: 1');
+    expect(sanitizeHttpValue('abc\rdef')).toEqual('abcdef');
+    expect(sanitizeHttpValue('abc\ndef')).toEqual('abcdef');
+    expect(sanitizeHttpValue('\r\n\r\nPUT /latest/api/token HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n')).not.toMatch(/[\r\n]/);
+  });
+
+  it('strips other ASCII control characters', () => {
+    expect(sanitizeHttpValue('abc\u0000def\u001fghi\u007f')).toEqual('abcdefghi');
+  });
+
+  it('trims surrounding whitespace and handles empty input', () => {
+    expect(sanitizeHttpValue('  token  ')).toEqual('token');
+    expect(sanitizeHttpValue('')).toEqual('');
+    expect(sanitizeHttpValue(null)).toEqual('');
+    expect(sanitizeHttpValue(undefined)).toEqual('');
   });
 });
